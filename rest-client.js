@@ -141,14 +141,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (!(contentType === 'multipart/form-data' && data.constructor.name === 'FormData')) xhr.setRequestHeader('Content-Type', contentType);
 	            }
 	
+	            var parameters = { method: method, data: data, url: url, contentType: contentType };
+	
 	            var p = new Promise(function (resolve, reject) {
 	                return xhr.onreadystatechange = function () {
 	                    if (xhr.readyState === 4) {
-	                        _this.emit('response', xhr);
-	                        p.emit('response', xhr);
+	                        _this.emit('response', xhr, parameters);
+	                        p.emit('response', xhr, parameters);
 	                        if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
-	                            _this.emit('success', xhr);
-	                            p.emit('success', xhr);
+	                            _this.emit('success', xhr, parameters);
+	                            p.emit('success', xhr, parameters);
 	
 	                            var res = xhr.response;
 	                            var responseHeader = xhr.getResponseHeader('Content-Type');
@@ -160,18 +162,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	                            p.off();
 	                            resolve(res);
 	                        } else {
-	                            _this.emit('error', xhr);
-	                            p.emit('error', xhr);
+	                            _this.emit('error', xhr, parameters);
+	                            p.emit('error', xhr, parameters);
 	                            p.off();
-	                            reject(xhr);
+	                            reject(xhr, parameters);
 	                        }
 	                    }
 	                };
 	            });
+	            p.xhr = xhr;
 	            new _minivents2.default(p);
 	            setTimeout(function () {
-	                _this.emit('request', xhr);
-	                p.emit('request', xhr);
+	                _this.emit('request', xhr, parameters);
+	                p.emit('request', xhr, parameters);
 	                xhr.send(data);
 	            }, 0);
 	            return p;

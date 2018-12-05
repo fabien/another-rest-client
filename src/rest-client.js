@@ -58,7 +58,7 @@ class RestClient {
 
         let xhr = new XMLHttpRequest();
         xhr.open(method, this.host + url, true);
-
+        
         if (contentType) {
             let mime = this._opts[contentType];
             if (mime && mime.encode)
@@ -66,15 +66,17 @@ class RestClient {
             if (!(contentType === 'multipart/form-data' && data.constructor.name === 'FormData'))
                 xhr.setRequestHeader('Content-Type', contentType);
         }
+        
+        let parameters = {method: method, data:data, url: url, contentType: contentType};
 
         let p = new Promise((resolve, reject) =>
             xhr.onreadystatechange = () => {
                 if (xhr.readyState === 4) {
-                    this.emit('response', xhr);
-                    p.emit('response', xhr);
+                    this.emit('response', xhr, parameters);
+                    p.emit('response', xhr, parameters);
                     if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
-                        this.emit('success', xhr);
-                        p.emit('success', xhr);
+                        this.emit('success', xhr, parameters);
+                        p.emit('success', xhr, parameters);
 
                         let res = xhr.response;
                         let responseHeader = xhr.getResponseHeader('Content-Type');
@@ -87,18 +89,19 @@ class RestClient {
                         p.off();
                         resolve(res);
                     } else {
-                        this.emit('error', xhr);
-                        p.emit('error', xhr);
+                        this.emit('error', xhr, parameters);
+                        p.emit('error', xhr, parameters);
                         p.off();
-                        reject(xhr);
+                        reject(xhr, parameters);
                     }
                 }
             }
         );
+        p.xhr = xhr;
         new Events(p);
         setTimeout(() => {
-            this.emit('request', xhr);
-            p.emit('request', xhr);
+            this.emit('request', xhr, parameters);
+            p.emit('request', xhr, parameters);
             xhr.send(data);
         }, 0);
         return p;

@@ -5,7 +5,8 @@
   "main": "rest-client.js",
   "scripts": {
     "test": "mocha",
-    "build": "webpack"
+    "build": "webpack",
+    "build-test": "webpack; mocha;"
   },
   "repository": {
     "type": "git",
@@ -32,6 +33,5 @@
     "sinon": "^1.17.4",
     "webpack": "^1.13.1"
   },
-  "dependencies": {
-  }
+  "dependencies": {}
 }
