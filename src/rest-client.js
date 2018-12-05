@@ -20,6 +20,40 @@ function safe(func, data) {
     }
 }
 
+function mergeParams(params) {
+    let merged = {};
+    params.forEach(function(param) {
+        if (typeof param === 'object') {
+            Object.assign(merged, param);
+        }
+    });
+    return [merged];
+}
+
+function filterParams(value) {
+    if (typeof value === 'object') {
+        return Object.keys(value).length !== 0;
+    } else {
+        return value !== undefined;
+    }
+}
+
+function extendObject(target, object) {
+    for (let k in object) {
+        if (typeof object[k] === 'function') {
+            target[k] = bindFn(object[k], target);
+        } else {
+            target[k] = object[k];
+        }
+    }
+}
+
+function bindFn(func, context) {
+    return function() {
+        return func.apply(context, arguments);
+    };
+}
+
 class RestClient {
     constructor(host, options) {
         this.host = host;
@@ -40,6 +74,7 @@ class RestClient {
             trailing: '',
             shortcut: true,
             shortcutRules: [],
+            mergeParams: true,
             contentType: 'application/json',
             'application/x-www-form-urlencoded': {encode: encodeUrl},
             'application/json': {encode: JSON.stringify, decode: JSON.parse}
@@ -49,14 +84,32 @@ class RestClient {
 
         return Object.assign({}, this._opts);
     }
+    
+    extend(definition, match) {
+        const client = this;
+        let fn = (resource, parent, name, id) => true;
+        if (typeof match === 'string') {
+            fn = (resource, parent, name, id) => name === match;
+        } else if (match instanceof RegExp) {
+            fn = (resource, parent, name, id) => match.test(name);
+        } else if (match === 'function') {
+            fn = (resource, parent, name, id) => match.call(client, resource, parent, name, id);
+        }
+        this.on('resource', (resource, parent, name, id) => {
+            if (fn(resource, parent, name, id)) {
+                resource.extend(definition);
+            }
+        });
+    }
 
-    _request(method, url, data=null, contentType=null) {
+    _request(method, url, data=null, headers={}, contentType=null) {
         if (url.indexOf('?') === -1)
             url += this._opts.trailing;
         else
             url = url.replace('?', this._opts.trailing + '?');
 
         let xhr = new XMLHttpRequest();
+        
         xhr.open(method, this.host + url, true);
         
         if (contentType) {
@@ -67,7 +120,13 @@ class RestClient {
                 xhr.setRequestHeader('Content-Type', contentType);
         }
         
-        let parameters = {method: method, data:data, url: url, contentType: contentType};
+        let parameters = {
+            method: method, data:data, url: url, contentType: contentType, headers: headers
+        };
+        
+        for (let k in headers) {
+            xhr.setRequestHeader(k, headers[k]);
+        }
 
         let p = new Promise((resolve, reject) =>
             xhr.onreadystatechange = () => {
@@ -108,22 +167,25 @@ class RestClient {
     }
 }
 
-function resource(client, parent, name, id, ctx) {
+function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
     let self = ctx ? ctx : (newId) => {
         if (newId === undefined)
             return self;
         return self._clone(parent, newId);
     };
-
+    
     self._resources = {};
     self._shortcuts = {};
-
-    self._clone = (parent, newId) => {
-        let copy = resource(client, parent, name, newId);
+    self._parent = parent;
+    self._headers = {};
+    self._params = {};
+    
+    self._clone = (parent, newId, prefix, params, fn) => {
+        let merged = Object.assign({}, baseParams, params);
+        let copy = resource(client, parent, prefix || name, newId, ctx, merged, fn);
         copy._shortcuts = self._shortcuts;
         for (let resName in self._resources) {
-            copy._resources[resName] = self._resources[resName]._clone(copy);
-
+            copy._resources[resName] = self._resources[resName]._clone(copy, undefined, undefined, params, fn);
             if (resName in copy._shortcuts)
                 copy[resName] = copy._resources[resName];
         }
@@ -170,38 +232,121 @@ function resource(client, parent, name, id, ctx) {
         }
     };
 
-    self.url = () => {
-        let url = parent ? parent.url() : '';
-        if (name)
-            url += '/' + name;
-        if (id !== undefined)
-            url += '/' + id;
+    self.execute = (method, data, params, headers, contentType = client._opts.contentType) => {
+        if (typeof headers === 'string') {
+            contentType = headers;
+            headers = {};
+        } else if (typeof params === 'string') {
+            contentType = params;
+            params = {};
+        }
+        var url = Array.isArray(params) ? self.url.apply(self, params) : self.url(params);
+        headers = Object.assign({}, self.getHeaders(), headers);
+        return client._request(method, url, data, headers, contentType);
+    };
+
+    self._execute = (method, args) => {
+        return self.execute.apply(self, [method].concat(args));
+    };
+    
+    self.baseUrl = function() {
+        let url = parent ? parent.baseUrl() : '';
+        if (name) url += '/' + name;
+        if (id !== undefined) url += '/' + id;
         return url;
     };
 
+    self.url = (...args) => {
+        let url = self.baseUrl();
+        let params = [self.getParams()].concat(args);
+        if (client._opts.mergeParams) params = mergeParams(params);
+        const query = params.filter(filterParams).map((param) => {
+            client.emit('params', param, self, parent, name, id);
+            return encodeUrl(param);
+        }).join('&');
+        if (query) url += '?' + query;
+        return url;
+    };
+    
+    self.scope = (...args) => {
+        let params = {};
+        let fn;
+        if (typeof args[args.length - 1] === 'function') {
+            fn = args.pop();
+        }
+        if (typeof args[args.length - 1] === 'object') {
+            Object.assign(params, args.pop());
+        }
+        let path = args.filter(filterParams).map(encodeURIComponent).join('/');
+        if (path === '') {
+            return self._clone(parent, id, undefined, params, fn);
+        } else {
+            return self._clone(self, undefined, path, params, fn);
+        }
+    };
+    
+    self.param = self.params = (key, value) => {
+        if (typeof key === 'object') {
+            Object.assign(self._params, key);
+        } else if (typeof key === 'string') {
+            self._params[key] = value;
+        }
+        return self;
+    };
+    
+    self.getParams = () => {
+        const _params = typeof paramsFn === 'function' ? paramsFn.call(self, parent, name, id) : {};
+        return Object.assign({}, baseParams, parent ? parent.getParams() : {}, self._params, _params);
+    };
+    
+    self.header = self.headers = (key, value) => {
+        if (typeof key === 'object') {
+            Object.assign(self._headers, key);
+        } else if (typeof key === 'string') {
+            self._headers[key] = value;
+        }
+        return self;
+    };
+    
+    self.getHeaders = () => {
+        return Object.assign({}, parent ? parent.getHeaders() : {}, self._headers);
+    };
+
+    if (!self.extend) {
+        self.extend = (definition) => {
+            if (typeof definition === 'object') {
+                extendObject(self, definition);
+            } else if (typeof definition === 'function') {
+                const def = definition(self, parent, name, id);
+                if (def) extendObject(self, typeof def === 'object' ? def : {});
+            }
+        };
+    }
+
+    // HTTP methods
+
     self.get = (...args) => {
-        let url = self.url();
-        const query = args.map(encodeUrl).join('&')
-        if (query)
-            url += '?' + query;
-        return client._request('GET', url);
+        return self.execute('GET', {}, args);
     };
 
-    self.post = (data, contentType = client._opts.contentType) => {
-        return client._request('POST', self.url(), data, contentType);
+    self.post = (...args) => {
+        return self._execute('POST', args);
     };
 
-    self.put = (data, contentType = client._opts.contentType) => {
-        return client._request('PUT', self.url(), data, contentType);
+    self.put = (...args) => {
+        return self._execute('PUT', args);
     };
 
-    self.patch = (data, contentType = client._opts.contentType) => {
-        return client._request('PATCH', self.url(), data, contentType);
+    self.patch = (...args) => {
+        return self._execute('PATCH', args);
     };
 
-    self.delete = () => {
-        return client._request('DELETE', self.url());
+    self.delete = (...args) => {
+        return self._execute('DELETE', args);
     };
+    
+    client.emit('resource', self, parent, name, id);
+    
     return self;
 }
 

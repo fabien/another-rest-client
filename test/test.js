@@ -65,7 +65,7 @@ describe('resource', () => {
     describe('#res()', () => {
         var api;
 
-        beforeEach(() => api = new RestClient(host));
+        beforeEach(() => { api = new RestClient(host); });
 
         it('should accept resource name and return resource', () => {
             var cookies = api.res('cookies');
@@ -154,6 +154,70 @@ describe('resource', () => {
         });
     });
 
+    describe('#extend', () => {
+        var api;
+    
+        beforeEach(() => {
+            api = new RestClient(host);
+            api.extend({
+                filter: function(params) {
+                    this._filter = this._filter || {};
+                    let filter = this._filter;
+                    Object.assign(filter, typeof params === 'object' ? params : {});
+                    return this.scope(function() {
+                        return { filter: JSON.stringify(filter) };
+                    });
+                },
+                find: function(filter, params) {
+                    return this.filter(filter).get(params);
+                }
+            });
+            api.extend(function(resource, parent, name, id) {
+                resource.demo = function() {
+                    return this.get({ demo: true });
+                };
+            });
+            api.res('cookies');
+        });
+    
+        it('should extend the endpoint (1)', () => {
+            var filteredCookies = api.cookies.filter({ foo: 'bar' });
+            filteredCookies.url().should.eql('/cookies?filter=%7B%22foo%22%3A%22bar%22%7D');
+            filteredCookies.filter({
+                foo: 'test', baz: 'quux'
+            }).url().should.eql('/cookies?filter=%7B%22foo%22%3A%22test%22%2C%22baz%22%3A%22quux%22%7D');
+        });
+        
+        it('should extend the endpoint (2)', () => {
+            var req;
+            xhr.onCreate = r => req = r;
+
+            api.cookies.find({ where: { foo: 'bar' } }, { page: 2 });
+            req.url.should.be.equal(host + '/cookies?filter=%7B%22where%22%3A%7B%22foo%22%3A%22bar%22%7D%7D&page=2');
+        });
+        
+        it('should extend the endpoint (3)', () => {
+            var req;
+            xhr.onCreate = r => req = r;
+
+            api.cookies.demo();
+            req.url.should.be.equal(host + '/cookies?demo=true');
+        });
+        
+        it('should extend the endpoint (4)', () => {
+            api.cookies.extend({
+                other: function() {
+                    return this.scope('other', { foo: 'bar' });
+                }
+            });
+            api.cookies.other().url().should.eql('/cookies/other?foo=bar');
+            api.cookies.other().filter({
+                baz: 'quux'
+            }).url().should.eql('/cookies/other?foo=bar&filter=%7B%22baz%22%3A%22quux%22%7D');
+        });
+        
+    });
+
     describe('#url()', () => {
         var api;
 
@@ -180,9 +244,28 @@ describe('resource', () => {
             api.cookies(42).bakers.cats.url().should.be.equal('/cookies/42/bakers/cats');
             api.cookies(42).bakers(24).cats(15).url().should.be.equal('/cookies/42/bakers/24/cats/15');
         });
+        
+        it('should build correct resource url with params', () => {
+            api.cookies.url({ foo: 'bar' }).should.be.equal('/cookies?foo=bar');
+        });
+        
+        it('should build correct resource url with multiple params', () => {
+            api.cookies.url({ foo: 'bar' }, { baz: 'quux' }).should.be.equal('/cookies?foo=bar&baz=quux');
+        });
+        
+        it('should emit params event', () => {
+            api.on('params', (params) => {
+                if (typeof params.baz === 'string') {
+                    params.baz = params.baz.toUpperCase();
+                }
+            });
+            api.cookies.url({
+                foo: 'bar', baz: 'quux'
+            }).should.be.equal('/cookies?foo=bar&baz=QUUX');
+        });
     });
-
-    describe('#get()', () => {
+    
+    describe('#scope()', () => {
         var api;
 
         beforeEach(() => {
@@ -190,15 +273,220 @@ describe('resource', () => {
             api.res('cookies');
         });
 
-        it('should correct form query args when get one instance', () => {
+        it('should build correct resource url', () => {
+            api.cookies().scope('demo', 'test').url().should.be.equal('/cookies/demo/test');
+            api.cookies().scope('demo', 'test', 123).url().should.be.equal('/cookies/demo/test/123');
+            api.cookies().scope('demo', 'test', '#foo').url().should.be.equal('/cookies/demo/test/%23foo');
+        });
+        
+        it('should build correct resource url - with params', () => {
+            api.cookies().scope('demo', 'test', { foo: 'bar' }).url().should.be.equal('/cookies/demo/test?foo=bar');
+            api.cookies().scope('demo', 'test', 123, { foo: 'bar' }).url().should.be.equal('/cookies/demo/test/123?foo=bar');
+            api.cookies().scope('demo', 'test', '#foo', { foo: 'bar' }).url().should.be.equal('/cookies/demo/test/%23foo?foo=bar');
+        });
+
+        it('should build correct resource instance url', () => {
+            api.cookies(42).scope('demo', 'test').url().should.be.equal('/cookies/42/demo/test');
+        });
+        
+        it('should build correct resource instance url - with params', () => {
+            api.cookies(42).scope('demo', 'test', { foo: 'bar' }).url().should.be.equal('/cookies/42/demo/test?foo=bar');
+        });
+        
+        it('should build correct resource url if two in stack', () => {
+            api.cookies.res('bakers');
+            api.cookies(42).scope('demo', 'test').bakers(24).url().should.be.equal('/cookies/42/demo/test/bakers/24');
+            api.cookies(42).bakers(24).scope('demo', 'test').url().should.be.equal('/cookies/42/bakers/24/demo/test');
+        });
+        
+        it('should build correct resource url if two in stack - with params', () => {
+            api.cookies.res('bakers');
+            api.cookies(42).scope('demo', 'test', { foo: 'bar' }).bakers(24).url().should.be.equal('/cookies/42/demo/test/bakers/24?foo=bar');
+            api.cookies(42).bakers(24).scope('demo', 'test', { foo: 'bar' }).url().should.be.equal('/cookies/42/bakers/24/demo/test?foo=bar');
+        });
+        
+        it('should build correct resource url if more than two in stack', () => {
+            api.cookies.res('bakers').res('cats');
+            api.cookies(42).scope('demo', 'test').bakers.cats.url().should.be.equal('/cookies/42/demo/test/bakers/cats');
+            api.cookies(42).bakers(24).scope('demo', 'test').cats(15).url().should.be.equal('/cookies/42/bakers/24/demo/test/cats/15');
+            api.cookies(42).bakers(24).cats(15).scope('demo', 'test').url().should.be.equal('/cookies/42/bakers/24/cats/15/demo/test');
+        });
+        
+        it('should build correct resource url if more than two in stack - with params', () => {
+            api.cookies.res('bakers').res('cats');
+            api.cookies(42).scope('demo', 'test', { foo: 'bar' }).bakers.cats.url().should.be.equal('/cookies/42/demo/test/bakers/cats?foo=bar');
+            api.cookies(42).bakers(24).scope('demo', 'test', { foo: 'bar' }).cats(15).url().should.be.equal('/cookies/42/bakers/24/demo/test/cats/15?foo=bar');
+            api.cookies(42).bakers(24).cats(15).scope('demo', 'test', { foo: 'bar' }).url().should.be.equal('/cookies/42/bakers/24/cats/15/demo/test?foo=bar');
+        });
+        
+        it('should build correct resource url params for multiple scopes (1)', () => {
+            api.cookies(42).scope({
+                foo: 'bar'
+            }).scope({
+                baz: 'quux'
+            }).url({
+                fox: 'beez'
+            }).should.be.equal('/cookies/42?foo=bar&baz=quux&fox=beez');
+        });
+        
+        it('should build correct resource url params for multiple scopes (2)', () => {
+            api.cookies(42).scope('demo', {
+                foo: 'bar'
+            }).scope('test', {
+                baz: 'quux'
+            }).url({
+                fox: 'beez'
+            }).should.be.equal('/cookies/42/demo/test?foo=bar&baz=quux&fox=beez');
+        });
+        
+        it('should build correct resource url params using a function', () => {
+            api.cookies(42).scope('demo', (parent, name, id) => {
+                return { name: name.toUpperCase() };
+            }).url({
+                fox: 'beez'
+            }).should.be.equal('/cookies/42/demo?name=DEMO&fox=beez');
+        });
+        
+        it('should build correct resource url params using multiple functions', () => {
+            api.cookies(42).scope('demo', (parent, name, id) => {
+                return { name: name.toUpperCase() };
+            }).scope('test', (parent, name, id) => {
+                return { foo: 'bar' };
+            }).url({
+                fox: 'beez'
+            }).should.be.equal('/cookies/42/demo/test?name=DEMO&foo=bar&fox=beez');
+        });
+        
+    });
+    
+    describe('#params', () => {
+        var api;
+    
+        beforeEach(() => {
+            api = new RestClient(host);
+            api.params({ 'sessionId': '1234' });
+            api.res('cookies');
+        });
+        
+        it('should set params (1)', () => {
+            api.cookies().param('foo', 'bar').url().should.be.equal('/cookies?sessionId=1234&foo=bar');
+        });
+        
+        it('should set params (2)', () => {
+            api.cookies().scope('demo', {
+                baz: 'quux'
+            }).params({
+                foo: 'bar'
+            }).url().should.be.equal('/cookies/demo?baz=quux&sessionId=1234&foo=bar');
+        });
+        
+        it('should set params (3)', () => {
+            api.cookies().scope('demo', {
+                baz: 'quux'
+            }).params({
+                foo: 'bar'
+            }).url({
+                foo: 'override'
+            }).should.be.equal('/cookies/demo?baz=quux&sessionId=1234&foo=override');
+        });
+    
+    });
+    
+    describe('#headers', () => {
+        var api;
+    
+        beforeEach(() => {
+            api = new RestClient(host);
+            api.headers({ 'X-Test': 'TEST' });
+            api.res('cookies');
+        });
+        
+        it('should send headers (1)', () => {
+            var req;
+            xhr.onCreate = r => req = r;
+            
+            api.cookies().header('Authentication', 'TOKEN').get();
+            req.url.should.be.equal(host + '/cookies');
+            req.requestHeaders['X-Test'].should.be.equal('TEST');
+            req.requestHeaders['Authentication'].should.be.equal('TOKEN');
+        });
+        
+        it('should send headers (2)', () => {
+            var req;
+            xhr.onCreate = r => req = r;
+            
+            api.cookies().scope('demo').header('Authentication', 'TOKEN').get();
+            req.url.should.be.equal(host + '/cookies/demo');
+            req.requestHeaders['X-Test'].should.be.equal('TEST');
+            req.requestHeaders['Authentication'].should.be.equal('TOKEN');
+        });
+    
+    });
+    
+    describe('#execute()', () => {
+        var api;
+
+        beforeEach(() => {
+            api = new RestClient(host);
+            api.res('cookies');
+        });
+        
+        it('should use query args when executing GET', () => {
+            var req;
+            xhr.onCreate = r => req = r;
+
+            api.cookies(4).execute('GET', {}, { foo: 'bar' }, { 'Authentication': 'TOKEN' });
+            req.url.should.be.equal(host + '/cookies/4?foo=bar');
+            req.requestHeaders['Authentication'].should.be.equal('TOKEN');
+        });
+        
+        it('should use query args when executing POST', (done) => {
+            var req;
+            xhr.onCreate = r => req = r;
+
+            var respText;
+
+            var p = api.cookies(4).scope('demo', 'test').execute('POST', { baz: 'quux' }, { foo: 'bar' });
+            p.on('success', xhr => respText = xhr.responseText);
+
+            setTimeout(() => req.respond(200, [], '{a:1}'), 0);
+
+            req.url.should.be.equal(host + '/cookies/4/demo/test?foo=bar');
+            p.then(r => {
+                r.should.be.equal('{a:1}');
+                respText.should.be.equal('{a:1}');
+                req.requestBody.should.be.equal('{"baz":"quux"}');
+                done();
+            }).catch(done);
+        });
+
+    });
+
+    describe('#get()', () => {
+        var api;
+
+        beforeEach(() => {
+            api = new RestClient(host, { mergeParams: false });
+            api.res('cookies');
+        });
+
+        it('should correct form query args when get one instance (number)', () => {
             var req;
             xhr.onCreate = r => req = r;
 
             api.cookies(4).get();
             req.url.should.be.equal(host + '/cookies/4');
         });
+        
+        it('should correct form query args when get one instance (string)', () => {
+            var req;
+            xhr.onCreate = r => req = r;
 
-        it('should correct form query args when get multiply instances', () => {
+            api.cookies('foo').get();
+            req.url.should.be.equal(host + '/cookies/foo');
+        });
+        
+        it('should correct form query args when get multiple instances', () => {
             var req;
             xhr.onCreate = r => req = r;
 
@@ -206,14 +494,14 @@ describe('resource', () => {
             req.url.should.be.equal(host + '/cookies?fresh=true');
         });
 
-        it('should correct form query args when get multiply args', () => {
+        it('should correct form query args when get multiple args', () => {
             var req;
             xhr.onCreate = r => req = r;
 
             api.cookies.get({'filter[]': 'fresh'}, {'filter[]': 'taste'});
             req.url.should.be.equal(host + '/cookies?filter%5B%5D=fresh&filter%5B%5D=taste');
         });
-
+        
         it('should work correctly with an undefined content type', (done) => {
             var req;
             xhr.onCreate = r => req = r;

@@ -56,9 +56,11 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	'use strict';
 	
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+	
 	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 	
-	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+	var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 	
 	var _minivents = __webpack_require__(1);
 	
@@ -87,6 +89,40 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 	}
 	
+	function mergeParams(params) {
+	    var merged = {};
+	    params.forEach(function (param) {
+	        if ((typeof param === 'undefined' ? 'undefined' : _typeof(param)) === 'object') {
+	            _extends(merged, param);
+	        }
+	    });
+	    return [merged];
+	}
+	
+	function filterParams(value) {
+	    if ((typeof value === 'undefined' ? 'undefined' : _typeof(value)) === 'object') {
+	        return Object.keys(value).length !== 0;
+	    } else {
+	        return value !== undefined;
+	    }
+	}
+	
+	function extendObject(target, object) {
+	    for (var k in object) {
+	        if (typeof object[k] === 'function') {
+	            target[k] = bindFn(object[k], target);
+	        } else {
+	            target[k] = object[k];
+	        }
+	    }
+	}
+	
+	function bindFn(func, context) {
+	    return function () {
+	        return func.apply(context, arguments);
+	    };
+	}
+	
 	var RestClient = function () {
 	    function RestClient(host, options) {
 	        _classCallCheck(this, RestClient);
@@ -113,6 +149,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                trailing: '',
 	                shortcut: true,
 	                shortcutRules: [],
+	                mergeParams: true,
 	                contentType: 'application/json',
 	                'application/x-www-form-urlencoded': { encode: encodeUrl },
 	                'application/json': { encode: JSON.stringify, decode: JSON.parse }
@@ -123,16 +160,45 @@ return /******/ (function(modules) { // webpackBootstrap
 	            return _extends({}, this._opts);
 	        }
 	    }, {
+	        key: 'extend',
+	        value: function extend(definition, match) {
+	            var client = this;
+	            var fn = function fn(resource, parent, name, id) {
+	                return true;
+	            };
+	            if (typeof match === 'string') {
+	                fn = function fn(resource, parent, name, id) {
+	                    return name === match;
+	                };
+	            } else if (match instanceof RegExp) {
+	                fn = function fn(resource, parent, name, id) {
+	                    return match.test(name);
+	                };
+	            } else if (match === 'function') {
+	                fn = function fn(resource, parent, name, id) {
+	                    return match.call(client, resource, parent, name, id);
+	                };
+	            }
+	            this.on('resource', function (resource, parent, name, id) {
+	                if (fn(resource, parent, name, id)) {
+	                    resource.extend(definition);
+	                }
+	            });
+	        }
+	    }, {
 	        key: '_request',
 	        value: function _request(method, url) {
+	            var data = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
+	
 	            var _this = this;
 	
-	            var data = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
-	            var contentType = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : null;
+	            var headers = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
+	            var contentType = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : null;
 	
 	            if (url.indexOf('?') === -1) url += this._opts.trailing;else url = url.replace('?', this._opts.trailing + '?');
 	
 	            var xhr = new XMLHttpRequest();
+	
 	            xhr.open(method, this.host + url, true);
 	
 	            if (contentType) {
@@ -141,7 +207,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (!(contentType === 'multipart/form-data' && data.constructor.name === 'FormData')) xhr.setRequestHeader('Content-Type', contentType);
 	            }
 	
-	            var parameters = { method: method, data: data, url: url, contentType: contentType };
+	            var parameters = {
+	                method: method, data: data, url: url, contentType: contentType, headers: headers
+	            };
+	
+	            for (var k in headers) {
+	                xhr.setRequestHeader(k, headers[k]);
+	            }
 	
 	            var p = new Promise(function (resolve, reject) {
 	                return xhr.onreadystatechange = function () {
@@ -185,6 +257,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	}();
 	
 	function resource(client, parent, name, id, ctx) {
+	    var baseParams = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : {};
+	    var paramsFn = arguments[6];
+	
 	    var self = ctx ? ctx : function (newId) {
 	        if (newId === undefined) return self;
 	        return self._clone(parent, newId);
@@ -192,13 +267,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	    self._resources = {};
 	    self._shortcuts = {};
+	    self._parent = parent;
+	    self._headers = {};
+	    self._params = {};
 	
-	    self._clone = function (parent, newId) {
-	        var copy = resource(client, parent, name, newId);
+	    self._clone = function (parent, newId, prefix, params, fn) {
+	        var merged = _extends({}, baseParams, params);
+	        var copy = resource(client, parent, prefix || name, newId, ctx, merged, fn);
 	        copy._shortcuts = self._shortcuts;
 	        for (var resName in self._resources) {
-	            copy._resources[resName] = self._resources[resName]._clone(copy);
-	
+	            copy._resources[resName] = self._resources[resName]._clone(copy, undefined, undefined, params, fn);
 	            if (resName in copy._shortcuts) copy[resName] = copy._resources[resName];
 	        }
 	        return copy;
@@ -242,45 +320,151 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	    };
 	
-	    self.url = function () {
-	        var url = parent ? parent.url() : '';
+	    self.execute = function (method, data, params, headers) {
+	        var contentType = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : client._opts.contentType;
+	
+	        if (typeof headers === 'string') {
+	            contentType = headers;
+	            headers = {};
+	        } else if (typeof params === 'string') {
+	            contentType = params;
+	            params = {};
+	        }
+	        var url = Array.isArray(params) ? self.url.apply(self, params) : self.url(params);
+	        headers = _extends({}, self.getHeaders(), headers);
+	        return client._request(method, url, data, headers, contentType);
+	    };
+	
+	    self._execute = function (method, args) {
+	        return self.execute.apply(self, [method].concat(args));
+	    };
+	
+	    self.baseUrl = function () {
+	        var url = parent ? parent.baseUrl() : '';
 	        if (name) url += '/' + name;
 	        if (id !== undefined) url += '/' + id;
 	        return url;
 	    };
 	
-	    self.get = function () {
+	    self.url = function () {
 	        for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
 	            args[_key] = arguments[_key];
 	        }
 	
-	        var url = self.url();
-	        var query = args.map(encodeUrl).join('&');
+	        var url = self.baseUrl();
+	        var params = [self.getParams()].concat(args);
+	        if (client._opts.mergeParams) params = mergeParams(params);
+	        var query = params.filter(filterParams).map(function (param) {
+	            client.emit('params', param, self, parent, name, id);
+	            return encodeUrl(param);
+	        }).join('&');
 	        if (query) url += '?' + query;
-	        return client._request('GET', url);
+	        return url;
 	    };
 	
-	    self.post = function (data) {
-	        var contentType = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : client._opts.contentType;
+	    self.scope = function () {
+	        for (var _len2 = arguments.length, args = Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+	            args[_key2] = arguments[_key2];
+	        }
 	
-	        return client._request('POST', self.url(), data, contentType);
+	        var params = {};
+	        var fn = void 0;
+	        if (typeof args[args.length - 1] === 'function') {
+	            fn = args.pop();
+	        }
+	        if (_typeof(args[args.length - 1]) === 'object') {
+	            _extends(params, args.pop());
+	        }
+	        var path = args.filter(filterParams).map(encodeURIComponent).join('/');
+	        if (path === '') {
+	            return self._clone(parent, id, undefined, params, fn);
+	        } else {
+	            return self._clone(self, undefined, path, params, fn);
+	        }
 	    };
 	
-	    self.put = function (data) {
-	        var contentType = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : client._opts.contentType;
-	
-	        return client._request('PUT', self.url(), data, contentType);
+	    self.param = self.params = function (key, value) {
+	        if ((typeof key === 'undefined' ? 'undefined' : _typeof(key)) === 'object') {
+	            _extends(self._params, key);
+	        } else if (typeof key === 'string') {
+	            self._params[key] = value;
+	        }
+	        return self;
 	    };
 	
-	    self.patch = function (data) {
-	        var contentType = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : client._opts.contentType;
+	    self.getParams = function () {
+	        var _params = typeof paramsFn === 'function' ? paramsFn.call(self, parent, name, id) : {};
+	        return _extends({}, baseParams, parent ? parent.getParams() : {}, self._params, _params);
+	    };
 	
-	        return client._request('PATCH', self.url(), data, contentType);
+	    self.header = self.headers = function (key, value) {
+	        if ((typeof key === 'undefined' ? 'undefined' : _typeof(key)) === 'object') {
+	            _extends(self._headers, key);
+	        } else if (typeof key === 'string') {
+	            self._headers[key] = value;
+	        }
+	        return self;
+	    };
+	
+	    self.getHeaders = function () {
+	        return _extends({}, parent ? parent.getHeaders() : {}, self._headers);
+	    };
+	
+	    if (!self.extend) {
+	        self.extend = function (definition) {
+	            if ((typeof definition === 'undefined' ? 'undefined' : _typeof(definition)) === 'object') {
+	                extendObject(self, definition);
+	            } else if (typeof definition === 'function') {
+	                var def = definition(self, parent, name, id);
+	                if (def) extendObject(self, (typeof def === 'undefined' ? 'undefined' : _typeof(def)) === 'object' ? def : {});
+	            }
+	        };
+	    }
+	
+	    // HTTP methods
+	
+	    self.get = function () {
+	        for (var _len3 = arguments.length, args = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+	            args[_key3] = arguments[_key3];
+	        }
+	
+	        return self.execute('GET', {}, args);
+	    };
+	
+	    self.post = function () {
+	        for (var _len4 = arguments.length, args = Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+	            args[_key4] = arguments[_key4];
+	        }
+	
+	        return self._execute('POST', args);
+	    };
+	
+	    self.put = function () {
+	        for (var _len5 = arguments.length, args = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
+	            args[_key5] = arguments[_key5];
+	        }
+	
+	        return self._execute('PUT', args);
+	    };
+	
+	    self.patch = function () {
+	        for (var _len6 = arguments.length, args = Array(_len6), _key6 = 0; _key6 < _len6; _key6++) {
+	            args[_key6] = arguments[_key6];
+	        }
+	
+	        return self._execute('PATCH', args);
 	    };
 	
 	    self.delete = function () {
-	        return client._request('DELETE', self.url());
+	        for (var _len7 = arguments.length, args = Array(_len7), _key7 = 0; _key7 < _len7; _key7++) {
+	            args[_key7] = arguments[_key7];
+	        }
+	
+	        return self._execute('DELETE', args);
 	    };
+	
+	    client.emit('resource', self, parent, name, id);
+	
 	    return self;
 	}
 	
