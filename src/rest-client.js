@@ -168,10 +168,14 @@ class RestClient {
 }
 
 function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
-    let self = ctx ? ctx : (newId) => {
-        if (newId === undefined)
+    let self = ctx ? ctx : (newId, params) => {
+        if (typeof newId === 'object') {
+            params = Object.assign({}, newId);
+            newId = undefined;
+        } else if (newId === undefined) {
             return self;
-        return self._clone(parent, newId);
+        }
+        return self._clone(parent, newId, undefined, params);
     };
     
     self._resources = {};
@@ -192,16 +196,28 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
         return copy;
     };
 
-    self.res = (resources, shortcut=client._opts.shortcut) => {
+    self.res = (resources, shortcut=client._opts.shortcut, params, paramsFn) => {
         let makeRes = (resName) => {
+            let options = {};
+            let _params = Object.assign({}, params);
+            if (typeof resName === 'object' && typeof resName.name === 'string') {
+                options = Object.assign(options, resName);
+                resName = options.name;
+                if (options.shortcut !== undefined) shortcut = options.shortcut;
+                _params = Object.assign({}, options.params, _params);
+                paramsFn = options.paramsFn || paramsFn;
+            }
+            
             if (resName in self._resources)
                 return self._resources[resName];
-
-            let r = resource(client, self, resName);
+            
+            let r = resource(client, self, resName, undefined, undefined, _params, paramsFn);
+            
             self._resources[resName] = r;
             if (shortcut) {
-                self._shortcuts[resName] = r;
-                self[resName] = r;
+                let shortcutName = typeof shortcut === 'string' ? shortcut : resName;
+                self._shortcuts[shortcutName] = r;
+                self[shortcutName] = r;
                 client._opts.shortcutRules.forEach(rule => {
                     let customShortcut = rule(resName);
                     if (customShortcut && typeof customShortcut === 'string') {
@@ -210,6 +226,9 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
                     }
                 });
             }
+            
+            if (options.resources) r.res(options.resources); // Nested
+            
             return r;
         };
 
@@ -224,8 +243,9 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
             let res = {};
             for (let resName in resources) {
                 let r = makeRes(resName);
-                if (resources[resName])
+                if (resources[resName]) {
                     r.res(resources[resName]);
+                }
                 res[resName] = r;
             }
             return res;
@@ -268,6 +288,26 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
         return url;
     };
     
+    self.use = (...args) => {
+        const resName = args.shift();
+        let resource;
+        if (Array.isArray(resName) || typeof resName === 'number') {
+            resource = self.apply(self, [].concat(resName));
+        } else {
+            resource = self[resName];
+        }
+        if (typeof resource === 'function' &&
+            typeof resource.use === 'function' && args.length > 0) {
+            return resource.use.apply(resource, args);
+        } else {
+            return resource;
+        }
+    };
+    
+    self.id = (id) => {
+        return self(id);
+    },
+    
     self.scope = (...args) => {
         let params = {};
         let fn;
@@ -285,7 +325,7 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
         }
     };
     
-    self.param = self.params = (key, value) => {
+    self.setParams = self.param = self.params = (key, value) => {
         if (typeof key === 'object') {
             Object.assign(self._params, key);
         } else if (typeof key === 'string') {
@@ -299,7 +339,7 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
         return Object.assign({}, baseParams, parent ? parent.getParams() : {}, self._params, _params);
     };
     
-    self.header = self.headers = (key, value) => {
+    self.setHeaders = self.header = self.headers = (key, value) => {
         if (typeof key === 'object') {
             Object.assign(self._headers, key);
         } else if (typeof key === 'string') {

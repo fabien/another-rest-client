@@ -75,30 +75,85 @@ describe('resource', () => {
         it('should accept array of resource names and return array of resources', () => {
             var t = api.res(['bees', 'cows']);
             t.should.be.an('array');
+            api.bees.should.be.a('function');
+            api.cows.should.be.a('function');
+        });
+        
+        it('should accept array of resource names and return array of resources - complex', () => {
+            var t = api.res([
+                { name: 'bees' },
+                { name: 'cows' },
+                {
+                    name: 'post',
+                    shortcut: 'item',
+                    params: { foo: 'bar' },
+                    paramsFn: function(parent, name, id) {
+                        return { example: name };
+                    }
+                }
+            ]);
+            t.should.be.an('array');
+            api.bees.should.be.a('function');
+            api.cows.should.be.a('function');
+            api.item.should.be.a('function');
+            api.item.url().should.be.equal('/post?foo=bar&example=post');
         });
 
         it('should accept object of resource names and return object of resources', () => {
             var t = api.res({
                 'bees': [
                     'big',
-                    'small'
+                    'small',
+                    { name: 'tiny' }
                 ],
                 'cows': {
                     'white': 'good'
                 },
-                'dogs': 0
+                'dogs': 0,
+                'demo': [
+                    {
+                        name: 'test',
+                        params: { foo: 'bar' },
+                        resources: 'deep'
+                    },
+                    {
+                        name: 'example',
+                        resources: [
+                            'other',
+                            { name: 'deeper', shortcut: 'more' }
+                        ]
+                    }
+                ]
             });
             t.should.be.an('object');
 
             api.bees.should.be.a('function');
             api.bees.big.should.be.a('function');
             api.bees.small.should.be.a('function');
+            api.bees.tiny.should.be.a('function');
 
             api.cows.should.be.a('function');
             api.cows.white.should.be.a('function');
             api.cows.white.good.should.be.a('function');
 
             api.dogs.should.be.a('function');
+            
+            api.demo.should.be.a('function');
+            api.demo.test.should.be.a('function');
+            api.demo.example.should.be.a('function');
+            api.demo.example.other.should.be.a('function');
+            api.demo.example.more.should.be.a('function');
+            
+            api.demo.test.url().should.be.equal('/demo/test?foo=bar');
+            api.demo.test.deep.url().should.be.equal('/demo/test/deep?foo=bar');
+            api.demo.example.more.url().should.be.equal('/demo/example/deeper');
+            
+            api.demo(5, { baz: 'quux' }).url().should.be.equal('/demo/5?baz=quux');
+            
+            api.demo({ baz: 'quux' }).test.url().should.be.equal('/demo/test?foo=bar&baz=quux');
+            api.demo.test.url({ foo: 'override' }).should.be.equal('/demo/test?foo=override');
+            
+            api.use('demo', 'example', 'more').url().should.be.equal('/demo/example/deeper');
         });
 
         it('should make a shortcut for resource by default', () => {
@@ -128,6 +183,13 @@ describe('resource', () => {
             api.should.not.have.property('cookies');
             var cookies = api.res('cookies', false);
             api.should.not.have.property('cookies');
+        });
+        
+        it('should make a shortcut using the second option', () => {
+            api.should.not.have.property('cookies');
+            var cookies = api.res('scope', 'fetch');
+            api.should.have.property('fetch');
+            api.fetch.url().should.be.equal('/scope');
         });
 
         it('should cache created resources', () => {
@@ -355,6 +417,46 @@ describe('resource', () => {
             }).url({
                 fox: 'beez'
             }).should.be.equal('/cookies/42/demo/test?name=DEMO&foo=bar&fox=beez');
+        });
+        
+    });
+    
+    describe('#use', () => {
+        
+        beforeEach(() => {
+            api = new RestClient(host);
+            api.res('users').res('posts');
+        });
+        
+        it('should return a resource (1)', () => {
+            let resource = api.use('users');
+            resource.should.be.an.object;
+            resource.url().should.be.equal('/users');
+            resource(4).url().should.be.equal('/users/4');
+        });
+        
+        it('should return a resource (2)', () => {
+            let posts = api.use('users').id(4).use('posts');
+            posts.should.be.an.object;
+            posts.id('new-post-slug').url().should.be.equal('/users/4/posts/new-post-slug');
+        });
+        
+        it('should return a resource (3)', () => {
+            let posts = api.use('users', 4, 'posts');
+            posts.should.be.an.object;
+            posts.url().should.be.equal('/users/4/posts');
+        });
+        
+        it('should return a resource (4)', () => {
+            let posts = api.use('users', ['me'], 'posts');
+            posts.should.be.an.object;
+            posts.url().should.be.equal('/users/me/posts');
+        });
+        
+        it('should return a resource (5)', () => {
+            let posts = api.use('users', ['me', { foo: 'bar' }], 'posts');
+            posts.should.be.an.object;
+            posts.url().should.be.equal('/users/me/posts?foo=bar');
         });
         
     });

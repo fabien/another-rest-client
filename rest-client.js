@@ -260,9 +260,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var baseParams = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : {};
 	    var paramsFn = arguments[6];
 	
-	    var self = ctx ? ctx : function (newId) {
-	        if (newId === undefined) return self;
-	        return self._clone(parent, newId);
+	    var self = ctx ? ctx : function (newId, params) {
+	        if ((typeof newId === 'undefined' ? 'undefined' : _typeof(newId)) === 'object') {
+	            params = _extends({}, newId);
+	            newId = undefined;
+	        } else if (newId === undefined) {
+	            return self;
+	        }
+	        return self._clone(parent, newId, undefined, params);
 	    };
 	
 	    self._resources = {};
@@ -284,15 +289,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	    self.res = function (resources) {
 	        var shortcut = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : client._opts.shortcut;
+	        var params = arguments[2];
+	        var paramsFn = arguments[3];
 	
 	        var makeRes = function makeRes(resName) {
+	            var options = {};
+	            var _params = _extends({}, params);
+	            if ((typeof resName === 'undefined' ? 'undefined' : _typeof(resName)) === 'object' && typeof resName.name === 'string') {
+	                options = _extends(options, resName);
+	                resName = options.name;
+	                if (options.shortcut !== undefined) shortcut = options.shortcut;
+	                _params = _extends({}, options.params, _params);
+	                paramsFn = options.paramsFn || paramsFn;
+	            }
+	
 	            if (resName in self._resources) return self._resources[resName];
 	
-	            var r = resource(client, self, resName);
+	            var r = resource(client, self, resName, undefined, undefined, _params, paramsFn);
+	
 	            self._resources[resName] = r;
 	            if (shortcut) {
-	                self._shortcuts[resName] = r;
-	                self[resName] = r;
+	                var shortcutName = typeof shortcut === 'string' ? shortcut : resName;
+	                self._shortcuts[shortcutName] = r;
+	                self[shortcutName] = r;
 	                client._opts.shortcutRules.forEach(function (rule) {
 	                    var customShortcut = rule(resName);
 	                    if (customShortcut && typeof customShortcut === 'string') {
@@ -301,6 +320,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    }
 	                });
 	            }
+	
+	            if (options.resources) r.res(options.resources); // Nested
+	
 	            return r;
 	        };
 	
@@ -313,7 +335,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var res = {};
 	            for (var resName in resources) {
 	                var r = makeRes(resName);
-	                if (resources[resName]) r.res(resources[resName]);
+	                if (resources[resName]) {
+	                    r.res(resources[resName]);
+	                }
 	                res[resName] = r;
 	            }
 	            return res;
@@ -362,9 +386,30 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return url;
 	    };
 	
-	    self.scope = function () {
+	    self.use = function () {
 	        for (var _len2 = arguments.length, args = Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
 	            args[_key2] = arguments[_key2];
+	        }
+	
+	        var resName = args.shift();
+	        var resource = void 0;
+	        if (Array.isArray(resName) || typeof resName === 'number') {
+	            resource = self.apply(self, [].concat(resName));
+	        } else {
+	            resource = self[resName];
+	        }
+	        if (typeof resource === 'function' && typeof resource.use === 'function' && args.length > 0) {
+	            return resource.use.apply(resource, args);
+	        } else {
+	            return resource;
+	        }
+	    };
+	
+	    self.id = function (id) {
+	        return self(id);
+	    }, self.scope = function () {
+	        for (var _len3 = arguments.length, args = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+	            args[_key3] = arguments[_key3];
 	        }
 	
 	        var params = {};
@@ -383,7 +428,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	    };
 	
-	    self.param = self.params = function (key, value) {
+	    self.setParams = self.param = self.params = function (key, value) {
 	        if ((typeof key === 'undefined' ? 'undefined' : _typeof(key)) === 'object') {
 	            _extends(self._params, key);
 	        } else if (typeof key === 'string') {
@@ -397,7 +442,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return _extends({}, baseParams, parent ? parent.getParams() : {}, self._params, _params);
 	    };
 	
-	    self.header = self.headers = function (key, value) {
+	    self.setHeaders = self.header = self.headers = function (key, value) {
 	        if ((typeof key === 'undefined' ? 'undefined' : _typeof(key)) === 'object') {
 	            _extends(self._headers, key);
 	        } else if (typeof key === 'string') {
@@ -424,40 +469,40 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // HTTP methods
 	
 	    self.get = function () {
-	        for (var _len3 = arguments.length, args = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
-	            args[_key3] = arguments[_key3];
+	        for (var _len4 = arguments.length, args = Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+	            args[_key4] = arguments[_key4];
 	        }
 	
 	        return self.execute('GET', {}, args);
 	    };
 	
 	    self.post = function () {
-	        for (var _len4 = arguments.length, args = Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
-	            args[_key4] = arguments[_key4];
+	        for (var _len5 = arguments.length, args = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
+	            args[_key5] = arguments[_key5];
 	        }
 	
 	        return self._execute('POST', args);
 	    };
 	
 	    self.put = function () {
-	        for (var _len5 = arguments.length, args = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
-	            args[_key5] = arguments[_key5];
+	        for (var _len6 = arguments.length, args = Array(_len6), _key6 = 0; _key6 < _len6; _key6++) {
+	            args[_key6] = arguments[_key6];
 	        }
 	
 	        return self._execute('PUT', args);
 	    };
 	
 	    self.patch = function () {
-	        for (var _len6 = arguments.length, args = Array(_len6), _key6 = 0; _key6 < _len6; _key6++) {
-	            args[_key6] = arguments[_key6];
+	        for (var _len7 = arguments.length, args = Array(_len7), _key7 = 0; _key7 < _len7; _key7++) {
+	            args[_key7] = arguments[_key7];
 	        }
 	
 	        return self._execute('PATCH', args);
 	    };
 	
 	    self.delete = function () {
-	        for (var _len7 = arguments.length, args = Array(_len7), _key7 = 0; _key7 < _len7; _key7++) {
-	            args[_key7] = arguments[_key7];
+	        for (var _len8 = arguments.length, args = Array(_len8), _key8 = 0; _key8 < _len8; _key8++) {
+	            args[_key8] = arguments[_key8];
 	        }
 	
 	        return self._execute('DELETE', args);
