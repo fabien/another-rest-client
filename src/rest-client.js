@@ -71,6 +71,7 @@ class RestClient {
 
     conf(options={}) {
         let currentOptions = this._opts || {
+            transport: 'default',
             trailing: '',
             shortcut: true,
             shortcutRules: [],
@@ -103,67 +104,30 @@ class RestClient {
     }
 
     _request(method, url, data=null, headers={}, contentType=null) {
-        if (url.indexOf('?') === -1)
+        if (url.indexOf('?') === -1) {
             url += this._opts.trailing;
-        else
+        } else {
             url = url.replace('?', this._opts.trailing + '?');
-
-        let xhr = new XMLHttpRequest();
-        
-        xhr.open(method, this.host + url, true);
+        }
         
         if (contentType) {
             let mime = this._opts[contentType];
             if (mime && mime.encode)
                 data = safe(mime.encode, data);
             if (!(contentType === 'multipart/form-data' && data.constructor.name === 'FormData'))
-                xhr.setRequestHeader('Content-Type', contentType);
+                headers['Content-Type'] = contentType;
         }
         
         let parameters = {
-            method: method, data:data, url: url, contentType: contentType, headers: headers
+            method: method,
+            data: data,
+            url: this.host + url,
+            contentType: contentType,
+            headers: headers
         };
         
-        for (let k in headers) {
-            xhr.setRequestHeader(k, headers[k]);
-        }
-
-        let p = new Promise((resolve, reject) =>
-            xhr.onreadystatechange = () => {
-                if (xhr.readyState === 4) {
-                    this.emit('response', xhr, parameters);
-                    p.emit('response', xhr, parameters);
-                    if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
-                        this.emit('success', xhr, parameters);
-                        p.emit('success', xhr, parameters);
-
-                        let res = xhr.response;
-                        let responseHeader = xhr.getResponseHeader('Content-Type');
-                        if (responseHeader) {
-                            let responseContentType = responseHeader.split(';')[0];
-                            let mime = this._opts[responseContentType];
-                            if (mime && mime.decode)
-                                res = safe(mime.decode, res);
-                        }
-                        p.off();
-                        resolve(res);
-                    } else {
-                        this.emit('error', xhr, parameters);
-                        p.emit('error', xhr, parameters);
-                        p.off();
-                        reject(xhr, parameters);
-                    }
-                }
-            }
-        );
-        p.xhr = xhr;
-        new Events(p);
-        setTimeout(() => {
-            this.emit('request', xhr, parameters);
-            p.emit('request', xhr, parameters);
-            xhr.send(data);
-        }, 0);
-        return p;
+        const transport = RestClient.Transports[this._opts.transport];
+        return transport(this, parameters, this._opts);
     }
 }
 
@@ -391,3 +355,93 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
 }
 
 module.exports = RestClient;
+
+// Transports
+
+RestClient.Transports = {};
+
+RestClient.Transports['default'] = function(client, parameters, options = {}) {
+    let { method, data, url, headers } = parameters;
+    
+    let xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    
+    for (let k in headers) {
+        xhr.setRequestHeader(k, headers[k]);
+    }
+
+    let p = new Promise((resolve, reject) =>
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 4) {
+                handleResponse(client, p, xhr, parameters, options, resolve, reject);
+            }
+        }
+    );
+    
+    p.xhr = xhr;
+    new Events(p);
+    
+    setTimeout(() => {
+        client.emit('request', xhr, parameters);
+        p.emit('request', xhr, parameters);
+        xhr.send(data);
+    }, 0);
+    
+    return p;
+};
+
+RestClient.Transports['jquery'] = function(client, parameters, options = {}) {
+    let xhr = $[options.jqueryAjax || 'ajax'](Object.assign({
+        beforeSend: function(xhr) {
+            client.emit('request', xhr, parameters);
+            p.emit('request', xhr, parameters);
+        }
+    }, parameters));
+    
+    let p = new Promise((resolve, reject) => {
+        p.xhr = xhr;
+        new Events(p);
+        xhr.done(function(data, textStatus, xhr) {
+            handleResponse(client, p, xhr, parameters, options, resolve, reject, data);
+        }).fail(function(xhr, textStatus, errorThrown) {
+            handleResponseFail(client, p, xhr, parameters, options, resolve, reject, true);
+        });
+    });
+    
+    return p;
+};
+
+// Helpers
+
+function handleResponse(client, p, xhr, parameters, options, resolve, reject, response) {
+    client.emit('response', xhr, parameters);
+    p.emit('response', xhr, parameters);
+    if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
+        client.emit('success', xhr, parameters);
+        p.emit('success', xhr, parameters);
+
+        let res = response || xhr.response;
+        let responseHeader = xhr.getResponseHeader('Content-Type');
+        if (responseHeader) {
+            let responseContentType = responseHeader.split(';')[0];
+            let mime = options[responseContentType];
+            if (mime && mime.decode)
+                res = safe(mime.decode, res);
+        }
+        p.off();
+        resolve(res);
+    } else {
+        handleResponseFail(client, p, xhr, parameters, options, resolve, reject);
+    }
+};
+
+function handleResponseFail(client, p, xhr, parameters, options, resolve, reject, responseEvent) {
+    if (responseEvent) {
+        client.emit('response', xhr, parameters);
+        p.emit('response', xhr, parameters);
+    }
+    client.emit('error', xhr, parameters);
+    p.emit('error', xhr, parameters);
+    p.off();
+    reject(xhr, parameters);
+};

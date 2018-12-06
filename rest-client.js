@@ -146,6 +146,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 	
 	            var currentOptions = this._opts || {
+	                transport: 'default',
 	                trailing: '',
 	                shortcut: true,
 	                shortcutRules: [],
@@ -189,67 +190,31 @@ return /******/ (function(modules) { // webpackBootstrap
 	        key: '_request',
 	        value: function _request(method, url) {
 	            var data = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
-	
-	            var _this = this;
-	
 	            var headers = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
 	            var contentType = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : null;
 	
-	            if (url.indexOf('?') === -1) url += this._opts.trailing;else url = url.replace('?', this._opts.trailing + '?');
-	
-	            var xhr = new XMLHttpRequest();
-	
-	            xhr.open(method, this.host + url, true);
+	            if (url.indexOf('?') === -1) {
+	                url += this._opts.trailing;
+	            } else {
+	                url = url.replace('?', this._opts.trailing + '?');
+	            }
 	
 	            if (contentType) {
 	                var mime = this._opts[contentType];
 	                if (mime && mime.encode) data = safe(mime.encode, data);
-	                if (!(contentType === 'multipart/form-data' && data.constructor.name === 'FormData')) xhr.setRequestHeader('Content-Type', contentType);
+	                if (!(contentType === 'multipart/form-data' && data.constructor.name === 'FormData')) headers['Content-Type'] = contentType;
 	            }
 	
 	            var parameters = {
-	                method: method, data: data, url: url, contentType: contentType, headers: headers
+	                method: method,
+	                data: data,
+	                url: this.host + url,
+	                contentType: contentType,
+	                headers: headers
 	            };
 	
-	            for (var k in headers) {
-	                xhr.setRequestHeader(k, headers[k]);
-	            }
-	
-	            var p = new Promise(function (resolve, reject) {
-	                return xhr.onreadystatechange = function () {
-	                    if (xhr.readyState === 4) {
-	                        _this.emit('response', xhr, parameters);
-	                        p.emit('response', xhr, parameters);
-	                        if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
-	                            _this.emit('success', xhr, parameters);
-	                            p.emit('success', xhr, parameters);
-	
-	                            var res = xhr.response;
-	                            var responseHeader = xhr.getResponseHeader('Content-Type');
-	                            if (responseHeader) {
-	                                var responseContentType = responseHeader.split(';')[0];
-	                                var _mime = _this._opts[responseContentType];
-	                                if (_mime && _mime.decode) res = safe(_mime.decode, res);
-	                            }
-	                            p.off();
-	                            resolve(res);
-	                        } else {
-	                            _this.emit('error', xhr, parameters);
-	                            p.emit('error', xhr, parameters);
-	                            p.off();
-	                            reject(xhr, parameters);
-	                        }
-	                    }
-	                };
-	            });
-	            p.xhr = xhr;
-	            new _minivents2.default(p);
-	            setTimeout(function () {
-	                _this.emit('request', xhr, parameters);
-	                p.emit('request', xhr, parameters);
-	                xhr.send(data);
-	            }, 0);
-	            return p;
+	            var transport = RestClient.Transports[this._opts.transport];
+	            return transport(this, parameters, this._opts);
 	        }
 	    }]);
 	
@@ -514,6 +479,102 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	
 	module.exports = RestClient;
+	
+	// Transports
+	
+	RestClient.Transports = {};
+	
+	RestClient.Transports['default'] = function (client, parameters) {
+	    var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+	    var method = parameters.method,
+	        data = parameters.data,
+	        url = parameters.url,
+	        headers = parameters.headers;
+	
+	
+	    var xhr = new XMLHttpRequest();
+	    xhr.open(method, url, true);
+	
+	    for (var k in headers) {
+	        xhr.setRequestHeader(k, headers[k]);
+	    }
+	
+	    var p = new Promise(function (resolve, reject) {
+	        return xhr.onreadystatechange = function () {
+	            if (xhr.readyState === 4) {
+	                handleResponse(client, p, xhr, parameters, options, resolve, reject);
+	            }
+	        };
+	    });
+	
+	    p.xhr = xhr;
+	    new _minivents2.default(p);
+	
+	    setTimeout(function () {
+	        client.emit('request', xhr, parameters);
+	        p.emit('request', xhr, parameters);
+	        xhr.send(data);
+	    }, 0);
+	
+	    return p;
+	};
+	
+	RestClient.Transports['jquery'] = function (client, parameters) {
+	    var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+	
+	    var xhr = $[options.jqueryAjax || 'ajax'](_extends({
+	        beforeSend: function beforeSend(xhr) {
+	            client.emit('request', xhr, parameters);
+	            p.emit('request', xhr, parameters);
+	        }
+	    }, parameters));
+	
+	    var p = new Promise(function (resolve, reject) {
+	        p.xhr = xhr;
+	        new _minivents2.default(p);
+	        xhr.done(function (data, textStatus, xhr) {
+	            handleResponse(client, p, xhr, parameters, options, resolve, reject, data);
+	        }).fail(function (xhr, textStatus, errorThrown) {
+	            handleResponseFail(client, p, xhr, parameters, options, resolve, reject, true);
+	        });
+	    });
+	
+	    return p;
+	};
+	
+	// Helpers
+	
+	function handleResponse(client, p, xhr, parameters, options, resolve, reject, response) {
+	    client.emit('response', xhr, parameters);
+	    p.emit('response', xhr, parameters);
+	    if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
+	        client.emit('success', xhr, parameters);
+	        p.emit('success', xhr, parameters);
+	
+	        var res = response || xhr.response;
+	        var responseHeader = xhr.getResponseHeader('Content-Type');
+	        if (responseHeader) {
+	            var responseContentType = responseHeader.split(';')[0];
+	            var mime = options[responseContentType];
+	            if (mime && mime.decode) res = safe(mime.decode, res);
+	        }
+	        p.off();
+	        resolve(res);
+	    } else {
+	        handleResponseFail(client, p, xhr, parameters, options, resolve, reject);
+	    }
+	};
+	
+	function handleResponseFail(client, p, xhr, parameters, options, resolve, reject, responseEvent) {
+	    if (responseEvent) {
+	        client.emit('response', xhr, parameters);
+	        p.emit('response', xhr, parameters);
+	    }
+	    client.emit('error', xhr, parameters);
+	    p.emit('error', xhr, parameters);
+	    p.off();
+	    reject(xhr, parameters);
+	};
 
 /***/ }),
 /* 1 */
