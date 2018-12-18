@@ -551,7 +551,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        client.emit('success', xhr, parameters);
 	        p.emit('success', xhr, parameters);
 	
-	        var res = response || xhr.response;
+	        var res = response || xhr.responseText;
 	        var responseHeader = xhr.getResponseHeader('Content-Type');
 	        if (responseHeader) {
 	            var responseContentType = responseHeader.split(';')[0];

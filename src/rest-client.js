@@ -420,7 +420,7 @@ function handleResponse(client, p, xhr, parameters, options, resolve, reject, re
         client.emit('success', xhr, parameters);
         p.emit('success', xhr, parameters);
 
-        let res = response || xhr.response;
+        let res = response || xhr.responseText;
         let responseHeader = xhr.getResponseHeader('Content-Type');
         if (responseHeader) {
             let responseContentType = responseHeader.split(';')[0];
