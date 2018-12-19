@@ -7,15 +7,21 @@ function encodeUrl(data) {
     return res.substr(0, res.length - 1);
 }
 
-function safe(func, data) {
+function safe(func, data, callback) {
     try {
-        return func(data);
+        let value = func(data);
+        if (typeof callback === 'function') callback(null, value);
+        return value;
     }
     catch(e) {
-        console.error('Error in function "' + func.name + '" while decode/encode data');
-        console.log(func);
-        console.log(data);
-        console.log(e);
+        if (typeof callback === 'function') {
+            callback(e);
+        } else {
+            console.error('Error in function "' + func.name + '" while decode/encode data');
+            console.log(func);
+            console.log(data);
+            console.log(e);
+        }
         return data;
     }
 }
@@ -76,6 +82,7 @@ class RestClient {
             shortcut: true,
             shortcutRules: [],
             mergeParams: true,
+            errorInstances: true,
             contentType: 'application/json',
             'application/x-www-form-urlencoded': {encode: encodeUrl},
             'application/json': {encode: JSON.stringify, decode: JSON.parse}
@@ -413,23 +420,30 @@ RestClient.Transports['jquery'] = function(client, parameters, options = {}) {
 
 // Helpers
 
+function parseResponse(response, client, p, xhr, parameters, options, resolve, reject) {
+    let res = response || xhr.responseText;
+    let responseHeader = xhr.getResponseHeader('Content-Type');
+    if (responseHeader) {
+        let responseContentType = responseHeader.split(';')[0];
+        let mime = options[responseContentType];
+        if (mime && mime.decode) {
+            safe(mime.decode, res, function(err, res) {
+                err ? reject(Object.assign(err, { xhr })) : resolve(res);
+            });
+            return;
+        }
+    }
+    resolve(res);
+};
+
 function handleResponse(client, p, xhr, parameters, options, resolve, reject, response) {
     client.emit('response', xhr, parameters);
     p.emit('response', xhr, parameters);
     if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
         client.emit('success', xhr, parameters);
         p.emit('success', xhr, parameters);
-
-        let res = response || xhr.responseText;
-        let responseHeader = xhr.getResponseHeader('Content-Type');
-        if (responseHeader) {
-            let responseContentType = responseHeader.split(';')[0];
-            let mime = options[responseContentType];
-            if (mime && mime.decode)
-                res = safe(mime.decode, res);
-        }
         p.off();
-        resolve(res);
+        parseResponse(response, client, p, xhr, parameters, options, resolve, reject);
     } else {
         handleResponseFail(client, p, xhr, parameters, options, resolve, reject);
     }
@@ -443,5 +457,23 @@ function handleResponseFail(client, p, xhr, parameters, options, resolve, reject
     client.emit('error', xhr, parameters);
     p.emit('error', xhr, parameters);
     p.off();
-    reject(xhr, parameters);
+    if (client._opts.errorInstances) {
+        new Promise(function(succes, fail) {
+            parseResponse(null, client, p, xhr, parameters, options, succes, fail);
+        }).then(function(res) {
+            let error = new Error('Request failed.');
+            if (typeof res === 'object') {
+                if (typeof res.error === 'object' && typeof res.error.message === 'string') {
+                    error = new Error(res.error.message);
+                }
+                error.details = res;
+            }
+            error.xhr = xhr;
+            reject(error, parameters);
+        }, function(err) {
+            reject(err, parameters);
+        });
+    } else {
+        reject(xhr, parameters);
+    }
 };

@@ -637,23 +637,38 @@ describe('resource', () => {
         it('should correctly handle exception with wrong encoded response body', (done) => {
             var req;
             xhr.onCreate = r => req = r;
-            sinon.spy(console, 'error');
-            sinon.spy(console, 'log');
-        
+            
             var p = api.cookies.get({fresh: true});
         
             req.respond(200, {'Content-Type': 'application/json'}, '{"a":1df}');
         
             req.url.should.be.equal(host + '/cookies?fresh=true');
-            p.then(r => {
-                r.should.be.equal('{"a":1df}');
-                console.error.callCount.should.equal(1);
-                console.log.callCount.should.equal(3);
-        
-                console.error.restore();
-                console.log.restore();
+            p.catch(function(error) {
+                error.message.should.equal('Unexpected token d in JSON at position 6');
+                error.xhr.status.should.equal(200);
                 done();
-            }).catch(done);
+            });
+        });
+        
+        it('should correctly handle error responses', (done) => {
+            var req;
+            xhr.onCreate = r => req = r;
+            
+            var p = api.cookies.get({fresh: true});
+        
+            req.respond(500, {
+                'Content-Type': 'application/json'
+            }, '{"error":{"type":"fail","message":"Something went wrong..."}}');
+        
+            req.url.should.be.equal(host + '/cookies?fresh=true');
+            p.catch(function(error) {
+                error.message.should.equal('Something went wrong...');
+                error.xhr.status.should.equal(500);
+                error.details.should.eql({
+                    error: { type: 'fail', message: 'Something went wrong...' }
+                });
+                done();
+            });
         });
 
         it('should emit once event', (done) => {
