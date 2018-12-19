@@ -70,12 +70,45 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 	
-	function encodeUrl(data) {
-	    var res = '';
-	    for (var k in data) {
-	        res += encodeURIComponent(k) + '=' + encodeURIComponent(data[k]) + '&';
-	    }return res.substr(0, res.length - 1);
-	}
+	function encodeUrl(a) {
+	    var s = [];
+	
+	    var add = function add(k, v) {
+	        v = typeof v === 'function' ? v() : v;
+	        v = v === null ? '' : v === undefined ? '' : v;
+	        s[s.length] = encodeURIComponent(k) + '=' + encodeURIComponent(v);
+	    };
+	
+	    var buildParams = function buildParams(prefix, obj) {
+	        var i = void 0,
+	            len = void 0,
+	            key = void 0;
+	        if (prefix) {
+	            if (Array.isArray(obj)) {
+	                for (i = 0, len = obj.length; i < len; i++) {
+	                    buildParams(_typeof(obj[i]) === 'object' && obj[i] ? prefix + '[' + i + ']' : prefix, obj[i]);
+	                }
+	            } else if (String(obj) === '[object Object]') {
+	                for (key in obj) {
+	                    buildParams(prefix + '[' + key + ']', obj[key]);
+	                }
+	            } else {
+	                add(prefix, obj);
+	            }
+	        } else if (Array.isArray(obj)) {
+	            for (i = 0, len = obj.length; i < len; i++) {
+	                add(obj[i].name, obj[i].value);
+	            }
+	        } else {
+	            for (key in obj) {
+	                buildParams(key, obj[key]);
+	            }
+	        }
+	        return s;
+	    };
+	
+	    return buildParams('', a).join('&');
+	};
 	
 	function safe(func, data, callback) {
 	    try {

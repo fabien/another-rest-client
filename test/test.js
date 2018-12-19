@@ -315,6 +315,14 @@ describe('resource', () => {
             api.cookies.url({ foo: 'bar' }, { baz: 'quux' }).should.be.equal('/cookies?foo=bar&baz=quux');
         });
         
+        it('should build correct resource url with nested params', () => {
+            api.cookies.url({
+                foo: 'bar',
+                baz: 'quux',
+                where: { id: { inq: ['foo', 'bar'] } }
+            }).should.be.equal('/cookies?foo=bar&baz=quux&where%5Bid%5D%5Binq%5D=foo&where%5Bid%5D%5Binq%5D=bar');
+        });
+        
         it('should emit params event', () => {
             api.on('params', (params) => {
                 if (typeof params.baz === 'string') {

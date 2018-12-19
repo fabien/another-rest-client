@@ -1,11 +1,45 @@
 import Events from 'minivents'
 
-function encodeUrl(data) {
-    let res = '';
-    for (let k in data)
-        res += encodeURIComponent(k) + '=' + encodeURIComponent(data[k]) + '&';
-    return res.substr(0, res.length - 1);
-}
+function encodeUrl(a) {
+    const s = [];
+    
+    const add = function (k, v) {
+        v = typeof v === 'function' ? v() : v;
+        v = v === null ? '' : v === undefined ? '' : v;
+        s[s.length] = encodeURIComponent(k) + '=' + encodeURIComponent(v);
+    };
+    
+    const buildParams = function (prefix, obj) {
+        let i, len, key;
+        if (prefix) {
+            if (Array.isArray(obj)) {
+                for (i = 0, len = obj.length; i < len; i++) {
+                    buildParams(
+                        (typeof obj[i] === 'object' && obj[i]) ? prefix + '[' + ( i ) + ']' : prefix,
+                        obj[i]
+                    );
+                }
+            } else if (String(obj) === '[object Object]') {
+                for (key in obj) {
+                    buildParams(prefix + '[' + key + ']', obj[key]);
+                }
+            } else {
+                add(prefix, obj);
+            }
+        } else if (Array.isArray(obj)) {
+            for (i = 0, len = obj.length; i < len; i++) {
+                add(obj[i].name, obj[i].value);
+            }
+        } else {
+            for (key in obj) {
+                buildParams(key, obj[key]);
+            }
+        }
+        return s;
+    };
+
+    return buildParams('', a).join('&');
+};
 
 function safe(func, data, callback) {
     try {
@@ -231,7 +265,7 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
             contentType = params;
             params = {};
         }
-        var url = Array.isArray(params) ? self.url.apply(self, params) : self.url(params);
+        let url = Array.isArray(params) ? self.url.apply(self, params) : self.url(params);
         headers = Object.assign({}, self.getHeaders(), headers);
         return client._request(method, url, data, headers, contentType);
     };
