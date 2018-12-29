@@ -325,6 +325,14 @@ describe('resource', () => {
             }).should.be.equal('/cookies?foo=bar&baz=quux&where%5Bid%5D%5Binq%5D=foo&where%5Bid%5D%5Binq%5D=bar');
         });
         
+        it('should build correct resource url with placeholder interpolation', () => {
+            api.cookies.scope(':id').url().should.be.equal('/cookies');
+            api.cookies.scope(':id').url({ id: 123 }).should.be.equal('/cookies/123');
+            api.cookies.scope(':id').url({ id: 'one two' }).should.be.equal('/cookies/one%20two');
+            api.cookies.scope(':id', ':fk').url({ id: 'one', fk: 'two' }).should.be.equal('/cookies/one/two');
+            api.cookies.scope(':id').url({ id: 123, foo: 'bar' }).should.be.equal('/cookies/123?foo=bar');
+        });
+        
         it('should emit params event', () => {
             api.on('params', (params) => {
                 if (typeof params.baz === 'string') {

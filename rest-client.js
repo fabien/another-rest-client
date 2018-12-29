@@ -68,6 +68,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
+	function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
+	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 	
 	function encodeUrl(a) {
@@ -135,7 +137,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            _extends(merged, param);
 	        }
 	    });
-	    return [merged];
+	    return merged;
 	}
 	
 	function filterParams(value) {
@@ -382,7 +384,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	        var url = self.baseUrl();
 	        var params = [self.getParams()].concat(args);
-	        if (client._opts.mergeParams) params = mergeParams(params);
+	
+	        if (client._opts.mergeParams) {
+	            var keys = [];
+	            var index = 0;
+	            var urlParams = mergeParams(params);
+	            url = url.replace(/\/?[:\*](\w+)/g, function (segment, key) {
+	                index += 1; // always increment
+	                var value = urlParams[key] || urlParams[index];
+	                var blank = isUndefined(value) || isNull(value);
+	                if (!blank) keys.push(key);
+	                if (url.indexOf(segment) === 0 && !blank) {
+	                    return encodeURIComponent(value);
+	                } else if (!blank) {
+	                    return '/' + encodeURIComponent(value);
+	                } else {
+	                    return '';
+	                }
+	            });
+	            params = [omit(urlParams, keys)];
+	        }
+	
 	        var query = params.filter(filterParams).map(function (param) {
 	            client.emit('params', param, self, parent, name, id);
 	            return encodeUrl(param);
@@ -425,7 +447,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (_typeof(args[args.length - 1]) === 'object') {
 	            _extends(params, args.pop());
 	        }
-	        var path = args.filter(filterParams).map(encodeURIComponent).join('/');
+	        var path = args.filter(filterParams).map(function (segment) {
+	            if (typeof segment === 'string' && segment.match(/^:/)) {
+	                return segment;
+	            } else {
+	                return encodeURIComponent(segment);
+	            }
+	        }).join('/');
 	        if (path === '') {
 	            return self._clone(parent, id, undefined, params, fn);
 	        } else {
@@ -640,6 +668,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	    } else {
 	        reject(xhr, parameters);
 	    }
+	};
+	
+	function isNull(value) {
+	    return value === null && (typeof value === 'undefined' ? 'undefined' : _typeof(value)) === 'object';
+	};
+	
+	function isUndefined(value) {
+	    return typeof value === 'undefined';
+	};
+	
+	function omit(obj) {
+	    var _ref;
+	
+	    for (var _len9 = arguments.length, keysToOmit = Array(_len9 > 1 ? _len9 - 1 : 0), _key9 = 1; _key9 < _len9; _key9++) {
+	        keysToOmit[_key9 - 1] = arguments[_key9];
+	    }
+	
+	    keysToOmit = (_ref = []).concat.apply(_ref, _toConsumableArray(keysToOmit));
+	    return Object.keys(obj).reduce(function (acc, key) {
+	        if (keysToOmit.indexOf(key) === -1) acc[key] = obj[key];
+	        return acc;
+	    }, {});
 	};
 
 /***/ }),

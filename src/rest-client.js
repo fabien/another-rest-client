@@ -67,7 +67,7 @@ function mergeParams(params) {
             Object.assign(merged, param);
         }
     });
-    return [merged];
+    return merged;
 }
 
 function filterParams(value) {
@@ -284,7 +284,27 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
     self.url = (...args) => {
         let url = self.baseUrl();
         let params = [self.getParams()].concat(args);
-        if (client._opts.mergeParams) params = mergeParams(params);
+        
+        if (client._opts.mergeParams) {
+            const keys = [];
+            let index = 0;
+            const urlParams = mergeParams(params);
+            url = url.replace(/\/?[:\*](\w+)/g, function (segment, key) {
+                index += 1; // always increment
+                const value = urlParams[key] || urlParams[index];
+                const blank = isUndefined(value) || isNull(value);
+                if (!blank) keys.push(key);
+                if (url.indexOf(segment) === 0 && !blank) {
+                    return encodeURIComponent(value);
+                } else if (!blank) {
+                    return '/' + encodeURIComponent(value);
+                } else {
+                    return '';
+                }
+            });
+            params = [omit(urlParams, keys)];
+        }
+        
         const query = params.filter(filterParams).map((param) => {
             client.emit('params', param, self, parent, name, id);
             return encodeUrl(param);
@@ -322,7 +342,13 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
         if (typeof args[args.length - 1] === 'object') {
             Object.assign(params, args.pop());
         }
-        let path = args.filter(filterParams).map(encodeURIComponent).join('/');
+        let path = args.filter(filterParams).map(function(segment) {
+            if (typeof segment === 'string' && segment.match(/^:/)) {
+                return segment;
+            } else {
+                return encodeURIComponent(segment);
+            }
+        }).join('/');
         if (path === '') {
             return self._clone(parent, id, undefined, params, fn);
         } else {
@@ -510,4 +536,20 @@ function handleResponseFail(client, p, xhr, parameters, options, resolve, reject
     } else {
         reject(xhr, parameters);
     }
+};
+
+function isNull(value) {
+    return value === null && typeof value === 'object';
+};
+
+function isUndefined(value) {
+    return typeof value === 'undefined';
+};
+
+function omit(obj, ...keysToOmit) {
+    keysToOmit = [].concat(...keysToOmit);
+    return Object.keys(obj).reduce((acc, key) => {
+        if (keysToOmit.indexOf(key) === -1) acc[key] = obj[key];
+        return acc;
+    }, {});
 };
