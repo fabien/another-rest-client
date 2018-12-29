@@ -443,6 +443,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            args[_key3] = arguments[_key3];
 	        }
 	
+	        args = (_ref = []).concat.apply(_ref, _toConsumableArray(args));
 	        var params = {};
 	        var fn = void 0;
 	        if (typeof args[args.length - 1] === 'function') {
@@ -451,7 +452,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (_typeof(args[args.length - 1]) === 'object') {
 	            _extends(params, args.pop());
 	        }
-	        args = (_ref = []).concat.apply(_ref, _toConsumableArray(args));
 	        var path = args.filter(filterParams).map(function (segment) {
 	            if (typeof segment === 'string' && segment.match(/^:/)) {
 	                return segment;

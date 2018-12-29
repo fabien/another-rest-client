@@ -336,6 +336,7 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
     },
     
     self.scope = (...args) => {
+        args = [].concat(...args);
         let params = {};
         let fn;
         if (typeof args[args.length - 1] === 'function') {
@@ -344,7 +345,6 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
         if (typeof args[args.length - 1] === 'object') {
             Object.assign(params, args.pop());
         }
-        args = [].concat(...args);
         let path = args.filter(filterParams).map(function(segment) {
             if (typeof segment === 'string' && segment.match(/^:/)) {
                 return segment;
