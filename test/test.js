@@ -6,7 +6,8 @@ var RestClient = require('../rest-client');
 
 var host = 'http://example.com';
 
-xhr = global.XMLHttpRequest = sinon.useFakeXMLHttpRequest();
+var xhr = global.XMLHttpRequest = sinon.useFakeXMLHttpRequest();
+
 global.FormData = FormData;
 
 describe('RestClient', () => {
@@ -62,6 +63,7 @@ describe('RestClient', () => {
 
 
 describe('resource', () => {
+    
     describe('#res()', () => {
         var api;
 
@@ -574,7 +576,7 @@ describe('resource', () => {
 
     describe('#get()', () => {
         var api;
-
+        
         beforeEach(() => {
             api = new RestClient(host, { mergeParams: false });
             api.res('cookies');
@@ -583,7 +585,7 @@ describe('resource', () => {
         it('should correct form query args when get one instance (number)', () => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             api.cookies(4).get();
             req.url.should.be.equal(host + '/cookies/4');
         });
@@ -591,7 +593,7 @@ describe('resource', () => {
         it('should correct form query args when get one instance (string)', () => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             api.cookies('foo').get();
             req.url.should.be.equal(host + '/cookies/foo');
         });
@@ -599,15 +601,15 @@ describe('resource', () => {
         it('should correct form query args when get multiple instances', () => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             api.cookies.get({fresh: true});
             req.url.should.be.equal(host + '/cookies?fresh=true');
         });
-
+        
         it('should correct form query args when get multiple args', () => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             api.cookies.get({'filter[]': 'fresh'}, {'filter[]': 'taste'});
             req.url.should.be.equal(host + '/cookies?filter%5B%5D=fresh&filter%5B%5D=taste');
         });
@@ -615,41 +617,47 @@ describe('resource', () => {
         it('should work correctly with an undefined content type', (done) => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             var p = api.cookies.get({fresh: true});
-
-            req.respond(200, [], '{a:1}');
-
+        
+            setTimeout(() => {
+                req.respond(200, [], '{a:1}');
+            }, 0);
+            
             req.url.should.be.equal(host + '/cookies?fresh=true');
             p.then(r => {
                 r.should.be.equal('{a:1}');
                 done();
             }).catch(done);
         });
-
+        
         it('should correctly parse response', (done) => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             var p = api.cookies.get({fresh: true});
-
-            req.respond(200, {'Content-Type': 'application/json'}, '{"a":"1df"}');
-
+            
+            setTimeout(() => {
+                req.respond(200, {'Content-Type': 'application/json'}, '{"a":"1df"}');
+            }, 0);
+            
             req.url.should.be.equal(host + '/cookies?fresh=true');
             p.then(r => {
                 r.should.be.deep.equal({"a": "1df"});
                 done();
             }).catch(done);
         });
-
+        
         it('should correctly handle exception with wrong encoded response body', (done) => {
             var req;
             xhr.onCreate = r => req = r;
-            
+        
             var p = api.cookies.get({fresh: true});
         
-            req.respond(200, {'Content-Type': 'application/json'}, '{"a":1df}');
-        
+            setTimeout(() => {
+                req.respond(200, {'Content-Type': 'application/json'}, '{"a":1df}');
+            }, 0);
+            
             req.url.should.be.equal(host + '/cookies?fresh=true');
             p.catch(function(error) {
                 error.message.should.equal('Unexpected token d in JSON at position 6');
@@ -661,13 +669,15 @@ describe('resource', () => {
         it('should correctly handle error responses', (done) => {
             var req;
             xhr.onCreate = r => req = r;
-            
+        
             var p = api.cookies.get({fresh: true});
         
-            req.respond(500, {
-                'Content-Type': 'application/json'
-            }, '{"error":{"type":"fail","message":"Something went wrong..."}}');
-        
+            setTimeout(() => {
+                req.respond(500, {
+                    'Content-Type': 'application/json'
+                }, '{"error":{"type":"fail","message":"Something went wrong..."}}');
+            }, 0);
+            
             req.url.should.be.equal(host + '/cookies?fresh=true');
             p.catch(function(error) {
                 error.message.should.equal('Something went wrong...');
@@ -678,17 +688,17 @@ describe('resource', () => {
                 done();
             });
         });
-
+        
         it('should emit once event', (done) => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             var respText;
-
+        
             var p = api.cookies.get({fresh: true}).on('success', xhr => respText = xhr.responseText);
-
+        
             setTimeout(() => req.respond(200, [], '{a:1}'), 0);
-
+        
             req.url.should.be.equal(host + '/cookies?fresh=true');
             p.then(r => {
                 r.should.be.equal('{a:1}');
@@ -696,22 +706,24 @@ describe('resource', () => {
                 done();
             }).catch(done);
         });
-
+        
         it('should emit once request event', (done) => {
             var req;
             xhr.onCreate = r => req = r;
-
+        
             var bool;
-
+        
             var p = api.cookies.get({fresh: true}).on('request', xhr => bool = true);
-
+        
             setTimeout(() => req.respond(200, [], '{a:1}'), 0);
-
+        
             req.url.should.be.equal(host + '/cookies?fresh=true');
             p.then(r => {
                 bool.should.be.equal(true);
                 done();
             }).catch(done);
         });
+        
     });
+    
 });
