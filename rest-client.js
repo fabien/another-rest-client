@@ -277,6 +277,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return self._clone(parent, newId, undefined, params);
 	    };
 	
+	    if (parent === self) parent = undefined;
+	
 	    self._resources = {};
 	    self._shortcuts = {};
 	    self._parent = parent;

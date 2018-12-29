@@ -331,6 +331,10 @@ describe('resource', () => {
             api.cookies.scope(':id').url({ id: 'one two' }).should.be.equal('/cookies/one%20two');
             api.cookies.scope(':id', ':fk').url({ id: 'one', fk: 'two' }).should.be.equal('/cookies/one/two');
             api.cookies.scope(':id').url({ id: 123, foo: 'bar' }).should.be.equal('/cookies/123?foo=bar');
+            
+            var scope = api.cookies.scope(':id', 'things', ':fk', { id: 123, fk: 'abc' });
+            scope.url().should.equal('/cookies/123/things/abc');
+            scope.url({ id: 456 }).should.equal('/cookies/456/things/abc');
         });
         
         it('should emit params event', () => {
