@@ -437,6 +437,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    self.id = function (id) {
 	        return self(id);
 	    }, self.scope = function () {
+	        var _ref;
+	
 	        for (var _len3 = arguments.length, args = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
 	            args[_key3] = arguments[_key3];
 	        }
@@ -449,6 +451,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (_typeof(args[args.length - 1]) === 'object') {
 	            _extends(params, args.pop());
 	        }
+	        args = (_ref = []).concat.apply(_ref, _toConsumableArray(args));
 	        var path = args.filter(filterParams).map(function (segment) {
 	            if (typeof segment === 'string' && segment.match(/^:/)) {
 	                return segment;
@@ -681,13 +684,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 	
 	function omit(obj) {
-	    var _ref;
+	    var _ref2;
 	
 	    for (var _len9 = arguments.length, keysToOmit = Array(_len9 > 1 ? _len9 - 1 : 0), _key9 = 1; _key9 < _len9; _key9++) {
 	        keysToOmit[_key9 - 1] = arguments[_key9];
 	    }
 	
-	    keysToOmit = (_ref = []).concat.apply(_ref, _toConsumableArray(keysToOmit));
+	    keysToOmit = (_ref2 = []).concat.apply(_ref2, _toConsumableArray(keysToOmit));
 	    return Object.keys(obj).reduce(function (acc, key) {
 	        if (keysToOmit.indexOf(key) === -1) acc[key] = obj[key];
 	        return acc;
