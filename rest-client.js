@@ -646,14 +646,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 	};
 	
+	function emitError(client, p, xhr, parameters, error) {
+	    client.emit('error', xhr, parameters, error);
+	    p.emit('error', xhr, parameters, error);
+	    p.off();
+	};
+	
 	function handleResponseFail(client, p, xhr, parameters, options, resolve, reject, responseEvent) {
 	    if (responseEvent) {
 	        client.emit('response', xhr, parameters);
 	        p.emit('response', xhr, parameters);
 	    }
-	    client.emit('error', xhr, parameters);
-	    p.emit('error', xhr, parameters);
-	    p.off();
 	    if (client._opts.errorInstances) {
 	        new Promise(function (succes, fail) {
 	            parseResponse(null, client, p, xhr, parameters, options, succes, fail);
@@ -666,11 +669,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	                error.details = res;
 	            }
 	            error.xhr = xhr;
+	            emitError(client, p, xhr, parameters, error);
 	            reject(error, parameters);
 	        }, function (err) {
+	            emitError(client, p, xhr, parameters, err);
 	            reject(err, parameters);
 	        });
 	    } else {
+	        client.emit('error', xhr, parameters);
+	        p.emit('error', xhr, parameters);
+	        p.off();
 	        reject(xhr, parameters);
 	    }
 	};
