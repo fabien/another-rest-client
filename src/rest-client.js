@@ -193,7 +193,7 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
     
     self._clone = (parent, newId, prefix, params, fn) => {
         let merged = Object.assign({}, baseParams, params);
-        let copy = resource(client, parent, prefix || name, newId, ctx, merged, fn);
+        let copy = resource(client, parent, prefix || name, newId, null, merged, fn);
         copy._shortcuts = Object.assign({}, self._shortcuts);
         for (let resName in self._resources) {
             copy._resources[resName] = self._resources[resName]._clone(copy, undefined, undefined, params, fn);
