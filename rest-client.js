@@ -288,7 +288,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    self._clone = function (parent, newId, prefix, params, fn) {
 	        var merged = _extends({}, baseParams, params);
 	        var copy = resource(client, parent, prefix || name, newId, ctx, merged, fn);
-	        copy._shortcuts = self._shortcuts;
+	        copy._shortcuts = _extends({}, self._shortcuts);
 	        for (var resName in self._resources) {
 	            copy._resources[resName] = self._resources[resName]._clone(copy, undefined, undefined, params, fn);
 	            if (resName in copy._shortcuts) copy[resName] = copy._resources[resName];
