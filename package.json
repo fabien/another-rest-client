@@ -1,5 +1,5 @@
 {
-  "name": "another-rest-client",
+  "name": "@atelierfabien/another-rest-client",
   "version": "0.5.0",
   "description": "Simple REST API client that makes your code lesser and more beautiful than without it.",
   "main": "rest-client.js",
@@ -10,17 +10,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Amareis/another-rest-client.git"
+    "url": "git+https://github.com/fabien/another-rest-client.git"
   },
   "keywords": [
     "rest"
   ],
-  "author": "joe <terma95@gmail.com>",
+  "author": "Fabien Franzen <info@atelierfabien.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Amareis/another-rest-client/issues"
+    "url": "https://github.com/fabien/another-rest-client/issues"
   },
-  "homepage": "https://github.com/Amareis/another-rest-client#readme",
+  "homepage": "https://github.com/fabien/another-rest-client#readme",
   "devDependencies": {
     "babel-core": "^6.26.0",
     "babel-loader": "^6.4.1",
