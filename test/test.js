@@ -2,7 +2,9 @@ var should = require('chai').should();
 var sinon = require('sinon');
 var FormData = require('form-data');
 
-var RestClient = require('../rest-client');
+var RestClient = require('../rest-client').default;
+
+var axios = require('../lib/axios')();
 
 var host = 'http://example.com';
 
@@ -738,4 +740,22 @@ describe('resource', () => {
         
     });
     
+});
+
+describe('Axios Transport', () => {
+
+    let api;
+
+    before(() => {
+        api = new RestClient('https://jsonplaceholder.typicode.com', {
+            axios, transport: 'axios'
+        });
+        api.res('users');
+    });
+
+    it('should perform GET', async () => {
+        const user = await api.users(1).get();
+        user.name.should.equal('Leanne Graham');
+    });
+
 });

@@ -3,6 +3,7 @@
   "version": "0.5.0",
   "description": "Simple REST API client that makes your code lesser and more beautiful than without it.",
   "main": "rest-client.js",
+  "module": "src/index.js",
   "scripts": {
     "test": "mocha",
     "build": "webpack",
@@ -33,5 +34,9 @@
     "sinon": "^7.2.2",
     "webpack": "^1.13.1"
   },
-  "dependencies": {}
+  "dependencies": {
+    "agentkeepalive": "^4.1.4",
+    "axios": "^0.21.1",
+    "axios-retry": "^3.1.9"
+  }
 }

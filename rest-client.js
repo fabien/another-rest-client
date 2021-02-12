@@ -56,6 +56,10 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	'use strict';
 	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 	
 	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
@@ -165,10 +169,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	
 	var RestClient = function () {
-	    function RestClient(host, options) {
+	    function RestClient(host) {
+	        var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+	
 	        _classCallCheck(this, RestClient);
 	
 	        this.host = host;
+	
 	        this.conf(options);
 	
 	        new _minivents2.default(this);
@@ -262,6 +269,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	    return RestClient;
 	}();
+	
+	exports.default = RestClient;
+	
 	
 	function resource(client, parent, name, id, ctx) {
 	    var baseParams = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : {};
@@ -551,8 +561,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	    return self;
 	}
 	
-	module.exports = RestClient;
-	
 	// Transports
 	
 	RestClient.Transports = {};
@@ -615,11 +623,53 @@ return /******/ (function(modules) { // webpackBootstrap
 	    return p;
 	};
 	
+	RestClient.Transports['axios'] = function (client, parameters) {
+	    var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+	
+	    var axios = options.axios;
+	    if (typeof axios === 'function' && typeof axios.request === 'function') {
+	        var params = omit(parameters, 'contentType');
+	        params.transformResponse = function (r) {
+	            return r;
+	        };
+	
+	        var p = new Promise(function (resolve, reject) {
+	            axios.request(params).then(function (result) {
+	                handleResponse(client, p, result.request, params, options, resolve, reject, result.data);
+	            }, function (error) {
+	                handleResponseFail(client, p, error.request, params, options, resolve, reject, true);
+	            });
+	        });
+	
+	        new _minivents2.default(p);
+	
+	        return p;
+	    } else {
+	        return Promise.reject(new Error('Invalid Axios instance'));
+	    }
+	};
+	
 	// Helpers
 	
+	function getResponseHeader(xhr, header) {
+	    if (_typeof(xhr.res) === 'object' && _typeof(xhr.res.headers) === 'object') {
+	        return xhr.res.headers[header.toLowerCase()];
+	    } else if (typeof xhr.getResponseHeader === 'function') {
+	        return xhr.getResponseHeader(header);
+	    }
+	};
+	
+	function getResponseStatus(xhr) {
+	    if (_typeof(xhr.res) === 'object' && typeof xhr.res.statusCode === 'number') {
+	        return xhr.res.statusCode;
+	    } else if (typeof xhr.status === 'number') {
+	        return xhr.status;
+	    }
+	};
+	
 	function parseResponse(response, client, p, xhr, parameters, options, resolve, reject) {
-	    var res = response || xhr.responseText;
-	    var responseHeader = xhr.getResponseHeader('Content-Type');
+	    var res = response || xhr.responseText || xhr.data;
+	    var responseHeader = getResponseHeader(xhr, 'Content-Type');
 	    if (responseHeader) {
 	        var responseContentType = responseHeader.split(';')[0];
 	        var mime = options[responseContentType];
@@ -636,7 +686,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	function handleResponse(client, p, xhr, parameters, options, resolve, reject, response) {
 	    client.emit('response', xhr, parameters);
 	    p.emit('response', xhr, parameters);
-	    if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
+	    var status = getResponseStatus(xhr);
+	    if (status === 200 || status === 201 || status === 204) {
 	        client.emit('success', xhr, parameters);
 	        p.emit('success', xhr, parameters);
 	        p.off();

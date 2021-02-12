@@ -1,4 +1,4 @@
-import Events from 'minivents'
+import Events from 'minivents';
 
 function encodeUrl(a) {
     const s = [];
@@ -95,8 +95,9 @@ function bindFn(func, context) {
 }
 
 class RestClient {
-    constructor(host, options) {
+    constructor(host, options = {}) {
         this.host = host;
+        
         this.conf(options);
 
         new Events(this);
@@ -171,6 +172,8 @@ class RestClient {
         return transport(this, parameters, this._opts);
     }
 }
+
+export default RestClient;
 
 function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
     let self = ctx ? ctx : (newId, params) => {
@@ -424,8 +427,6 @@ function resource(client, parent, name, id, ctx, baseParams = {}, paramsFn) {
     return self;
 }
 
-module.exports = RestClient;
-
 // Transports
 
 RestClient.Transports = {};
@@ -481,11 +482,49 @@ RestClient.Transports['jquery'] = function(client, parameters, options = {}) {
     return p;
 };
 
+RestClient.Transports['axios'] = function(client, parameters, options = {}) {
+    let axios = options.axios;
+    if (typeof axios === 'function' && typeof axios.request === 'function') {
+        const params = omit(parameters, 'contentType');
+        params.transformResponse = (r) => r;
+
+        let p = new Promise((resolve, reject) => {
+            axios.request(params).then((result) => {
+                handleResponse(client, p, result.request, params, options, resolve, reject, result.data);
+            }, (error) => {
+                handleResponseFail(client, p, error.request, params, options, resolve, reject, true);
+            });
+        });
+
+        new Events(p);
+
+        return p;
+    } else {
+        return Promise.reject(new Error('Invalid Axios instance'));
+    }
+};
+
 // Helpers
 
+function getResponseHeader(xhr, header) {
+    if (typeof xhr.res === 'object' && typeof xhr.res.headers === 'object') {
+        return xhr.res.headers[header.toLowerCase()];
+    } else if (typeof xhr.getResponseHeader === 'function') {
+        return xhr.getResponseHeader(header);
+    }
+};
+
+function getResponseStatus(xhr) {
+    if (typeof xhr.res === 'object' && typeof xhr.res.statusCode === 'number') {
+        return xhr.res.statusCode;
+    } else if (typeof xhr.status === 'number') {
+        return xhr.status;
+    }
+};
+
 function parseResponse(response, client, p, xhr, parameters, options, resolve, reject) {
-    let res = response || xhr.responseText;
-    let responseHeader = xhr.getResponseHeader('Content-Type');
+    let res = response || xhr.responseText || xhr.data;
+    let responseHeader = getResponseHeader(xhr, 'Content-Type');
     if (responseHeader) {
         let responseContentType = responseHeader.split(';')[0];
         let mime = options[responseContentType];
@@ -502,7 +541,8 @@ function parseResponse(response, client, p, xhr, parameters, options, resolve, r
 function handleResponse(client, p, xhr, parameters, options, resolve, reject, response) {
     client.emit('response', xhr, parameters);
     p.emit('response', xhr, parameters);
-    if (xhr.status === 200 || xhr.status === 201 || xhr.status === 204) {
+    const status = getResponseStatus(xhr);
+    if (status === 200 || status === 201 || status === 204) {
         client.emit('success', xhr, parameters);
         p.emit('success', xhr, parameters);
         p.off();
