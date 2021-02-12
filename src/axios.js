@@ -9,7 +9,7 @@ const retryDefaults = {
     retries: 3, retryDelay: axiosRetry.exponentialDelay
 };
 
-export function axios(options = {}) {
+export default function(options = {}) {
     let { retry, ...config } = { ...defaults, ...options };
     const client = axios.create(config);
     
